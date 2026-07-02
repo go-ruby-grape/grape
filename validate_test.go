@@ -249,7 +249,7 @@ func TestValidateArray(t *testing.T) {
 func TestValidateNestedHash(t *testing.T) {
 	set := &ParamSet{Params: []*Param{{
 		Name: "grp", Required: true, IsHash: true,
-		Group: []*Param{{Name: "inner", Required: true, Type: TypeInteger}},
+		Group: &ParamSet{Params: []*Param{{Name: "inner", Required: true, Type: TypeInteger}}},
 	}}}
 	// Valid nested.
 	c, e := errString(t, set, Raw{"grp": map[string]any{"inner": "5"}})
@@ -280,7 +280,7 @@ func TestValidateNestedHash(t *testing.T) {
 
 func TestValidateOptionalHashAbsent(t *testing.T) {
 	// An absent optional Hash simply produces nothing (no missing-group report).
-	set := &ParamSet{Params: []*Param{{Name: "grp", IsHash: true, Group: []*Param{{Name: "inner", Required: true, Type: TypeInteger}}}}}
+	set := &ParamSet{Params: []*Param{{Name: "grp", IsHash: true, Group: &ParamSet{Params: []*Param{{Name: "inner", Required: true, Type: TypeInteger}}}}}}
 	c, e := errString(t, set, Raw{})
 	if e != "" {
 		t.Fatalf("got %q", e)

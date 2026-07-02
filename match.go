@@ -75,12 +75,10 @@ func (rt *Router) Match(method, path string) Match {
 		if r.methodMatches(method) {
 			return Match{Status: StatusOK, Route: r, Params: params}
 		}
-		// Path matched, method did not: remember the method for the Allow header.
-		m := r.Method
-		if m == "" {
-			m = "*"
-		}
-		if !seen[m] {
+		// Path matched, method did not. Only a concrete-method route can reach
+		// here (an empty / "*" method always matches), so r.Method is a real verb;
+		// record it once for the Allow header.
+		if m := r.Method; !seen[m] {
 			seen[m] = true
 			allowed = append(allowed, m)
 		}

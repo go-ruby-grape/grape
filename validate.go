@@ -48,9 +48,7 @@ func validateGroup(params []*Param, raw Raw, prefix string, errs *ValidationErro
 		name := qualify(prefix, p.Name)
 
 		if !present {
-			if handleAbsent(p, name, out, errs) {
-				continue
-			}
+			handleAbsent(p, name, out, errs)
 			continue
 		}
 		coercePresent(p, rawVal, name, out, errs)
@@ -58,22 +56,21 @@ func validateGroup(params []*Param, raw Raw, prefix string, errs *ValidationErro
 	return out
 }
 
-// handleAbsent applies default / presence rules for a missing parameter. It
-// returns true once it has decided the parameter's fate (always true here; the
-// bool keeps the caller symmetric and readable).
-func handleAbsent(p *Param, name string, out map[string]any, errs *ValidationErrors) bool {
+// handleAbsent applies default / presence rules for a missing parameter: it
+// supplies a default when declared, else reports "is missing" for a required
+// parameter (recursing into a required Hash's inner requireds).
+func handleAbsent(p *Param, name string, out map[string]any, errs *ValidationErrors) {
 	if p.HasDefault || p.DefaultFunc != nil {
 		out[p.Name] = defaultValue(p)
-		return true
+		return
 	}
 	if p.Required {
 		errs.add(name, "is missing")
 		// A missing required Hash also reports its missing inner requireds.
-		if p.IsHash {
-			reportMissingGroup(p.Group, name, errs)
+		if p.IsHash && p.Group != nil {
+			reportMissingGroup(p.Group.Params, name, errs)
 		}
 	}
-	return true
 }
 
 // reportMissingGroup emits "is missing" for each required child of an absent
@@ -105,8 +102,12 @@ func coerceHash(p *Param, rawVal any, name string, out map[string]any, errs *Val
 		errs.add(name, "is invalid")
 		return
 	}
-	sub := validateGroup(p.Group, nested, name, errs)
-	validateExclusivityGroup(p.Group, nested, name, errs)
+	if p.Group == nil {
+		out[p.Name] = map[string]any{}
+		return
+	}
+	sub := validateGroup(p.Group.Params, nested, name, errs)
+	validateExclusivity(p.Group, nested, name, errs)
 	out[p.Name] = sub
 }
 
@@ -134,6 +135,11 @@ func coerceArray(p *Param, rawVal any, name string, out map[string]any, errs *Va
 	}
 	if !valid {
 		errs.add(name, "is invalid")
+		return
+	}
+	// length: applies to the array's element count.
+	if msg := checkLength(p, elems); msg != "" {
+		errs.add(name, msg)
 		return
 	}
 	out[p.Name] = elems

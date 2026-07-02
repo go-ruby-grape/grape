@@ -45,8 +45,9 @@ type Param struct {
 	CoerceWith func(raw string) (any, bool)
 
 	// Group holds the nested declarations of a Hash param (`requires :g, type:
-	// Hash do … end`) or the per-element declarations of an Array of hashes.
-	Group []*Param
+	// Hash do … end`), including its own cross-parameter validators, so nested
+	// exclusivity reports names as "grp[a], grp[b]".
+	Group *ParamSet
 }
 
 // Regexp is a compiled-pattern reference. The deterministic core does not embed
@@ -68,17 +69,9 @@ type ParamSet struct {
 	AllOrNoneOf       [][]string
 }
 
-// scalarType reports the effective type used to coerce a leaf value: the element
-// type for an array, else the declared type (defaulting to String-passthrough).
+// scalarType reports the type used to coerce a leaf (non-array, non-hash) value:
+// the declared type, or "" for an untyped String-passthrough. Array elements are
+// coerced against ElemType directly in coerceArray, so this is leaf-only.
 func (p *Param) scalarType() Type {
-	if p.IsArray {
-		if p.ElemType != "" {
-			return p.ElemType
-		}
-		return TypeString
-	}
-	if p.Type != "" {
-		return p.Type
-	}
-	return ""
+	return p.Type
 }

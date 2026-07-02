@@ -4,61 +4,49 @@
 
 package grape
 
-// validateExclusivity runs the top-level cross-parameter validators.
+// validateExclusivity runs a ParamSet's four cross-parameter validators against
+// raw, prefixing parameter names with prefix so nested groups report
+// "grp[a], grp[b]". Presence is by key: a key present in raw (even with a blank
+// value) counts, mirroring Grape.
 func validateExclusivity(set *ParamSet, raw Raw, prefix string, errs *ValidationErrors) {
-	runExclusivity(set.MutuallyExclusive, set.ExactlyOneOf, set.AtLeastOneOf, set.AllOrNoneOf, raw, prefix, errs)
-}
-
-// validateExclusivityGroup runs a nested group's cross-parameter validators.
-// A nested ParamSet is not modelled separately; group-level exclusivity is
-// carried on the group's own ParamSet when the host supplies one. This helper is
-// a no-op placeholder for groups declared without cross-validators, kept so the
-// validate path is uniform.
-func validateExclusivityGroup(params []*Param, raw Raw, prefix string, errs *ValidationErrors) {
-	_ = params
-	_ = raw
-	_ = prefix
-	_ = errs
-}
-
-// runExclusivity applies the four cross-parameter validators in Grape's order,
-// using key-presence (a key present in raw, even with a blank value, counts).
-func runExclusivity(mutex, exactly, atLeast, allOrNone [][]string, raw Raw, prefix string, errs *ValidationErrors) {
-	for _, group := range mutex {
-		if countPresent(group, raw) > 1 {
-			errs.add(joinNames(qualifyAll(prefix, group)), "are mutually exclusive")
+	for _, group := range set.MutuallyExclusive {
+		if present := presentNames(group, raw); len(present) > 1 {
+			errs.add(joinNames(qualifyAll(prefix, present)), "are mutually exclusive")
 		}
 	}
-	for _, group := range exactly {
-		n := countPresent(group, raw)
-		if n == 0 {
+	for _, group := range set.ExactlyOneOf {
+		present := presentNames(group, raw)
+		switch {
+		case len(present) == 0:
 			errs.add(joinNames(qualifyAll(prefix, group)), "are missing, exactly one parameter must be provided")
-		} else if n > 1 {
-			errs.add(joinNames(qualifyAll(prefix, group)), "are mutually exclusive")
+		case len(present) > 1:
+			// The over-supplied case reports only the present params, like
+			// mutually_exclusive.
+			errs.add(joinNames(qualifyAll(prefix, present)), "are mutually exclusive")
 		}
 	}
-	for _, group := range atLeast {
-		if countPresent(group, raw) == 0 {
+	for _, group := range set.AtLeastOneOf {
+		if len(presentNames(group, raw)) == 0 {
 			errs.add(joinNames(qualifyAll(prefix, group)), "are missing, at least one parameter must be provided")
 		}
 	}
-	for _, group := range allOrNone {
-		n := countPresent(group, raw)
-		if n != 0 && n != len(group) {
+	for _, group := range set.AllOrNoneOf {
+		if n := len(presentNames(group, raw)); n != 0 && n != len(group) {
 			errs.add(joinNames(qualifyAll(prefix, group)), "provide all or none of parameters")
 		}
 	}
 }
 
-// countPresent counts how many of the named parameters have a key in raw.
-func countPresent(names []string, raw Raw) int {
-	n := 0
+// presentNames returns the subset of names whose key is present in raw, in the
+// declared order.
+func presentNames(names []string, raw Raw) []string {
+	var out []string
 	for _, name := range names {
 		if _, ok := raw[name]; ok {
-			n++
+			out = append(out, name)
 		}
 	}
-	return n
+	return out
 }
 
 // qualifyAll prefixes each name with the group prefix for nested exclusivity
